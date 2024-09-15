@@ -8,9 +8,9 @@
 /server/.env
 
 # Sensitive JSON files
-/server/superjoin-sheets.json
-/server/superjoin-sheetsv.json
-/server/client-secret.json
+server/superjoin-sheets.json
+server/superjoin-sheetsv.json
+server/client-secret.json
 
 # Utilities
 /utils/superjoin-sheets.json
