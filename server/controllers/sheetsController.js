@@ -1,7 +1,7 @@
 const { google } = require('googleapis');
 const fs = require('fs');
 const path = require('path');
-const serviceAccount = require('../superjoin-sheets.json'); // Your Google service account credentials
+const serviceAccount = require('../superjoin-sheetsv2.json'); // Your Google service account credentials
 
 const auth = new google.auth.GoogleAuth({
   credentials: serviceAccount,
