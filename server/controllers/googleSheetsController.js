@@ -1,9 +1,8 @@
+const { google } = require('googleapis');
 const fs = require('fs');
 const path = require('path');
-const { google } = require('googleapis');
-const cron = require('node-cron');
+const cron = require('node-cron'); // Import node-cron for polling
 const serviceAccount = require('../superjoin-sheetsv.json');
-const processData = require('../utils/sheetProcessor');
 
 const auth = new google.auth.GoogleAuth({
   credentials: serviceAccount,
@@ -15,12 +14,45 @@ const drive = google.drive({ version: 'v3', auth });
 
 const sheetIdFilePath = path.join(__dirname, '../uploads/sheetId.json');
 const sheetsFilePath = path.join(__dirname, '../uploads/sheets.json');
-const sqlFilePath = path.join(__dirname, '../uploads/sql.json');
 
-// Function to fetch and update the Google Sheet data (Sync)
-const syncGoogleSheet = async () => {
+// Function to detect an update, update the latestModifiedTime, and fetch the updated spreadsheet
+const detectAndUpdateSheet = async () => {
   try {
-    // Read sheetId.json to get the spreadsheetId and latest modified time
+    const sheetIdData = JSON.parse(fs.readFileSync(sheetIdFilePath, 'utf8'));
+    const { spreadsheetId, latestModifiedTime } = sheetIdData;
+
+    if (!spreadsheetId) {
+      throw new Error('spreadsheetId not found in sheetId.json.');
+    }
+
+    console.log(`Current latestModifiedTime in sheetId.json: ${latestModifiedTime || 'No previous timestamp set.'}`);
+
+    const revisionsResponse = await drive.revisions.list({ fileId: spreadsheetId });
+    const revisions = revisionsResponse.data.revisions;
+
+    const latestRevision = revisions.sort((a, b) => new Date(b.modifiedTime) - new Date(a.modifiedTime))[0];
+
+    console.log(`Latest revision timestamp from Google Drive: ${latestRevision.modifiedTime}`);
+
+    if (!latestModifiedTime || new Date(latestRevision.modifiedTime) > new Date(latestModifiedTime)) {
+      console.log('New update detected. Updating sheetId.json and fetching the updated Google Sheet data...');
+
+      sheetIdData.latestModifiedTime = latestRevision.modifiedTime;
+      fs.writeFileSync(sheetIdFilePath, JSON.stringify(sheetIdData, null, 2));
+      console.log(`Updated sheetId.json with the latest timestamp: ${latestRevision.modifiedTime}`);
+
+      await fetchSpreadsheetData();
+    } else {
+      console.log('No new updates detected.');
+    }
+  } catch (error) {
+    console.error('Error detecting update or fetching data:', error.message);
+  }
+};
+
+// Function to fetch spreadsheet data and store it in sheets.json
+const fetchSpreadsheetData = async () => {
+  try {
     const sheetIdData = JSON.parse(fs.readFileSync(sheetIdFilePath, 'utf8'));
     const { spreadsheetId } = sheetIdData;
 
@@ -28,55 +60,31 @@ const syncGoogleSheet = async () => {
       throw new Error('spreadsheetId not found in sheetId.json.');
     }
 
-    // Check if latestModifiedTime exists in sheetId.json; if not, initialize it
-    if (!sheetIdData.latestModifiedTime) {
-      console.log('No previous latestModifiedTime found. Initializing field.');
-      sheetIdData.latestModifiedTime = null;
-    }
+    console.log(`Fetching data for spreadsheet ID: ${spreadsheetId}`);
 
-    console.log(`Current latestModifiedTime in sheetId.json: ${sheetIdData.latestModifiedTime || 'No previous timestamp set.'}`);
+    const response = await sheets.spreadsheets.get({ spreadsheetId });
 
-    // Fetch the revision log from Google Drive
-    const revisionsResponse = await drive.revisions.list({ fileId: spreadsheetId });
-    const revisions = revisionsResponse.data.revisions;
+    const sheetTitle = response.data.sheets[0].properties.title;
+    console.log(`Fetched sheet: ${sheetTitle}`);
 
-    // Print the entire revision log
-    console.log('Revision Log:');
-    revisions.forEach((revision, index) => {
-      console.log(`Revision ${index + 1}:`);
-      console.log(`  ID: ${revision.id}`);
-      console.log(`  Modified Time: ${revision.modifiedTime}`);
-      console.log(`  Last Modified By: ${revision.lastModifyingUser?.displayName || 'Unknown'}`);
+    const sheetDataResponse = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `${sheetTitle}!A1:Z1000`,
     });
 
-    // Sort the revisions by modified time (descending)
-    const latestRevision = revisions.sort((a, b) => new Date(b.modifiedTime) - new Date(a.modifiedTime))[0];
+    const sheetData = sheetDataResponse.data.values || [];
 
-    console.log(`Latest revision timestamp from Google Drive: ${latestRevision.modifiedTime}`);
+    const sheetsJsonData = {
+      sheet: {
+        title: sheetTitle,
+        data: sheetData,
+      },
+    };
 
-    // Check if this is the first time syncing or if the latest revision is newer
-    if (!sheetIdData.latestModifiedTime || new Date(latestRevision.modifiedTime) > new Date(sheetIdData.latestModifiedTime)) {
-      console.log('New update detected in the Google Sheet. Syncing...');
-
-      // Fetch the updated spreadsheet and update sheets.json, sql.json, and your database logic
-      const response = await sheets.spreadsheets.get({ spreadsheetId });
-      fs.writeFileSync(sheetsFilePath, JSON.stringify(response.data, null, 2));
-      console.log('Updated sheets.json with the latest Google Sheet data.');
-
-      // Transform sheets.json into sql.json (assuming processData() does that)
-      const processedData = processData();
-      fs.writeFileSync(sqlFilePath, JSON.stringify(processedData, null, 2));
-      console.log('Updated sql.json with transformed data.');
-
-      // Update the latestModifiedTime in sheetId.json
-      sheetIdData.latestModifiedTime = latestRevision.modifiedTime;
-      fs.writeFileSync(sheetIdFilePath, JSON.stringify(sheetIdData, null, 2));
-      console.log(`Updated sheetId.json with the latest timestamp: ${latestRevision.modifiedTime}`);
-    } else {
-      console.log('No new updates detected.');
-    }
+    fs.writeFileSync(sheetsFilePath, JSON.stringify(sheetsJsonData, null, 2));
+    console.log('Updated sheets.json with the latest Google Sheet data.');
   } catch (error) {
-    console.error('Error during sync process:', error.message);
+    console.error('Error fetching spreadsheet data:', error.message);
   }
 };
 
@@ -85,7 +93,6 @@ const createOrUpdateGoogleSheet = async (req, res) => {
   try {
     const sheetsFilePath = path.join(__dirname, '../uploads/sheets.json');
 
-    // Read data from sheets.json
     let processedSheetData;
     try {
       processedSheetData = JSON.parse(fs.readFileSync(sheetsFilePath, 'utf8'));
@@ -129,9 +136,9 @@ const createOrUpdateGoogleSheet = async (req, res) => {
   }
 };
 
+// Function to check if latestModifiedTime is missing and update it
 const updateLatestModifiedTimeIfMissing = async () => {
   try {
-    // Read sheetId.json to get the spreadsheetId and latest modified time
     const sheetIdData = JSON.parse(fs.readFileSync(sheetIdFilePath, 'utf8'));
     const { spreadsheetId, latestModifiedTime } = sheetIdData;
 
@@ -139,19 +146,15 @@ const updateLatestModifiedTimeIfMissing = async () => {
       throw new Error('spreadsheetId not found in sheetId.json.');
     }
 
-    // Check if latestModifiedTime exists, if not, fetch it from revision log
     if (!latestModifiedTime) {
       console.log('No latestModifiedTime found in sheetId.json. Fetching from revision log...');
 
-      // Fetch the revision log from Google Drive
       const revisionsResponse = await drive.revisions.list({ fileId: spreadsheetId });
       const revisions = revisionsResponse.data.revisions;
 
-      // Sort the revisions by modified time (descending) and get the latest one
       const latestRevision = revisions.sort((a, b) => new Date(b.modifiedTime) - new Date(a.modifiedTime))[0];
 
       if (latestRevision) {
-        // Update sheetId.json with the latest modified time
         sheetIdData.latestModifiedTime = latestRevision.modifiedTime;
         fs.writeFileSync(sheetIdFilePath, JSON.stringify(sheetIdData, null, 2));
         console.log(`Updated sheetId.json with the latestModifiedTime: ${latestRevision.modifiedTime}`);
@@ -185,56 +188,26 @@ const getSpreadsheetInfoAndRevisions = async (req, res) => {
   }
 };
 
-const fetchSpreadsheetData = async () => {
-  try {
-    // Read sheetId.json to get the spreadsheetId
-    const sheetIdData = JSON.parse(fs.readFileSync(sheetIdFilePath, 'utf8'));
-    const { spreadsheetId } = sheetIdData;
-
-    if (!spreadsheetId) {
-      throw new Error('spreadsheetId not found in sheetId.json.');
-    }
-
-    console.log(`Fetching data for spreadsheet ID: ${spreadsheetId}`);
-
-    // Fetch the data from the Google Spreadsheet using the Sheets API
-    const response = await sheets.spreadsheets.get({
-      spreadsheetId,
-    });
-
-    // Extract the sheet name and data
-    const sheetTitle = response.data.sheets[0].properties.title;
-    console.log(`Fetched sheet: ${sheetTitle}`);
-
-    // Fetch the values from the spreadsheet
-    const sheetDataResponse = await sheets.spreadsheets.values.get({
-      spreadsheetId,
-      range: `${sheetTitle}!A1:Z1000`, // Adjust the range as necessary
-    });
-
-    const sheetData = sheetDataResponse.data.values || [];
-
-    // Write the fetched data to sheets.json
-    const sheetsJsonData = {
-      sheet: {
-        title: sheetTitle,
-        data: sheetData,
-      },
-    };
-
-    fs.writeFileSync(sheetsFilePath, JSON.stringify(sheetsJsonData, null, 2));
-    console.log('Updated sheets.json with the latest Google Sheet data.');
-
-  } catch (error) {
-    console.error('Error fetching spreadsheet data:', error.message);
-  }
+// Function to start polling
+const startPolling = () => {
+  console.log('Starting polling for Google Sheets updates...');
+  
+  // Poll every 10 seconds
+  cron.schedule('*/10 * * * * *', async () => {
+    console.log('Polling Google Sheets for updates...');
+    await detectAndUpdateSheet();
+  });
+  
 };
 
-// fetchSpreadsheetData();
+// Start polling when the module is loaded
+startPolling();
 
-updateLatestModifiedTimeIfMissing();
-
-// Export functions
-exports.syncGoogleSheet = syncGoogleSheet;
-exports.createOrUpdateGoogleSheet = createOrUpdateGoogleSheet;
-exports.getSpreadsheetInfoAndRevisions = getSpreadsheetInfoAndRevisions;
+// Exporting all functions
+module.exports = {
+  detectAndUpdateSheet,
+  fetchSpreadsheetData,
+  createOrUpdateGoogleSheet,
+  updateLatestModifiedTimeIfMissing,
+  getSpreadsheetInfoAndRevisions,
+};
