@@ -1,11 +1,8 @@
 const express = require('express');
-const { syncData } = require('../middlewares/syncMiddleware');
-const syncController = require('../controllers/syncController');
-const logMiddleware = require('../middlewares/logMiddleware'); // Import logMiddleware
-
 const router = express.Router();
+const syncController = require('../controllers/syncController');
 
-// Sync route that logs requests
-router.post('/sync', logMiddleware, syncData, syncController.performSync);
+// Sync route to handle Google Sheet to MySQL table sync
+router.post('/sync', syncController.syncSheetToTable);
 
 module.exports = router;

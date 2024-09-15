@@ -1,203 +1,96 @@
 const fs = require('fs');
 const path = require('path');
 const { google } = require('googleapis');
-const serviceAccount = require('../superjoin-sheetsv2.json');
-const processSheetsData = require('../utils/sheetProcessor');
-const ChangeLog = require('../models/changeLogModel');
+const serviceAccount = require('../superjoin-sheetsv.json');
 
 const auth = new google.auth.GoogleAuth({
   credentials: serviceAccount,
-  scopes: [
-    'https://www.googleapis.com/auth/spreadsheets',
-    'https://www.googleapis.com/auth/drive',
-    'https://www.googleapis.com/auth/script.projects'
-  ],
+  scopes: ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive.readonly'],
 });
 
 const sheets = google.sheets({ version: 'v4', auth });
 const drive = google.drive({ version: 'v3', auth });
-const script = google.script({ version: 'v1', auth });
 
 const sheetIdFilePath = path.join(__dirname, '../uploads/sheetId.json');
 
-exports.createOrUpdateGoogleSheet = async (req, res) => {
-    try {
-      const sheetsFilePath = path.join(__dirname, '../uploads/sheets.json');
-  
-      if (!fs.existsSync(sheetsFilePath)) {
-        return res.status(400).send('sheets.json not found.');
-      }
-  
-      let processedSheetData;
-      try {
-        processedSheetData = JSON.parse(fs.readFileSync(sheetsFilePath, 'utf8'));
-      } catch (error) {
-        return res.status(400).send('Invalid JSON format in sheets.json.');
-      }
-  
-      if (!processedSheetData.data || typeof processedSheetData.data !== 'object') {
-        return res.status(400).send('Invalid format for sheet data.');
-      }
-  
-      const columns = processedSheetData.sheet.columns;
-      const data = processedSheetData.data;
-  
-      // Initialize rows with the column headers
-      const rows = [columns];
-  
-      // Determine the maximum number of rows
-      const maxRows = Math.max(...Object.values(data).map(arr => arr.length));
-  
-      // Populate rows with values
-      for (let i = 0; i < maxRows; i++) {
-        const row = columns.map(col => data[col][i] || ''); // Ensure all rows have values for all columns
-        rows.push(row);
-      }
-  
-      const processedData = {
-        sheet: {
-          title: processedSheetData.sheet.title || 'New Sheet',
-          columns: columns
-        },
-        data: rows
-      };
-  
-      let spreadsheetId;
-      if (fs.existsSync(sheetIdFilePath)) {
-        const sheetIdData = JSON.parse(fs.readFileSync(sheetIdFilePath, 'utf8'));
-        spreadsheetId = sheetIdData.spreadsheetId;
-        await exports.updateGoogleSheet(spreadsheetId, processedData);
-        return res.status(200).send('Existing sheet updated.');
-      } else {
-        const response = await sheets.spreadsheets.create({
-          resource: {
-            properties: { title: processedData.sheet.title },
-            sheets: [
-              {
-                properties: { title: processedData.sheet.title },
-                data: [
-                  {
-                    rowData: rows.map(row => ({
-                      values: row.map(cell => ({
-                        userEnteredValue: { stringValue: cell.toString() },
-                      })),
-                    })),
-                  },
-                ],
-              },
-            ],
-          },
-        });
-  
-        spreadsheetId = response.data.spreadsheetId;
-        console.log(`Spreadsheet created with ID: ${spreadsheetId}`);
-  
-        fs.writeFileSync(sheetIdFilePath, JSON.stringify({ spreadsheetId }));
-  
-        await exports.shareGoogleSheet(spreadsheetId, 'hollanishan@gmail.com');
-        await exports.deployAppsScript(spreadsheetId);
-  
-        return res.status(200).send('Spreadsheet created and shared.');
-      }
-    } catch (error) {
-      console.error('Error creating or updating the Google Sheet:', error);
-      return res.status(500).send('Failed to create or update the Google Sheet.');
-    }
-  };
-  
-
-exports.updateGoogleSheet = async (spreadsheetId, processedSheetData) => {
+// Function to read and print `spreadsheetId`, fetch its name, and print revision history
+const printSpreadsheetInfoAndRevisions = async (req, res) => {
   try {
-    await sheets.spreadsheets.values.update({
-      spreadsheetId,
-      range: `${processedSheetData.sheet.title}!A1`,
-      valueInputOption: 'USER_ENTERED',
-      resource: {
-        values: [
-          processedSheetData.sheet.columns,
-          ...processedSheetData.data,
-        ],
-      },
-    });
-    console.log(`Spreadsheet with ID ${spreadsheetId} updated.`);
-  } catch (error) {
-    console.error('Error updating the Google Sheet:', error);
-    throw new Error('Failed to update the Google Sheet.');
-  }
-};
+    // Read the sheetId.json file
+    const sheetIdData = JSON.parse(fs.readFileSync(sheetIdFilePath, 'utf8'));
+    const spreadsheetId = sheetIdData.spreadsheetId;
 
-exports.shareGoogleSheet = async (spreadsheetId, email) => {
-  try {
-    await drive.permissions.create({
-      resource: {
-        type: 'user',
-        role: 'writer',
-        emailAddress: email,
-      },
+    // Print the spreadsheetId
+    console.log(`Spreadsheet ID: ${spreadsheetId}`);
+
+    // Fetch the spreadsheet metadata (name)
+    const sheetResponse = await sheets.spreadsheets.get({ spreadsheetId });
+    const spreadsheetName = sheetResponse.data.properties.title;
+
+    // Print the spreadsheet name
+    console.log(`Spreadsheet Name: ${spreadsheetName}`);
+
+    // Fetch the revision history of the file
+    const revisionResponse = await drive.revisions.list({
       fileId: spreadsheetId,
-      fields: 'id',
     });
 
-    console.log(`Spreadsheet shared with ${email}`);
+    const revisions = revisionResponse.data.revisions;
+    if (revisions) {
+      console.log('Revision History:');
+      revisions.forEach((revision, index) => {
+        console.log(`Revision ${index + 1}:`);
+        console.log(`ID: ${revision.id}`);
+        console.log(`Modified Time: ${revision.modifiedTime}`);
+        console.log(`Last Modified By: ${revision.lastModifyingUser?.displayName || 'Unknown'}`);
+        console.log('---------------------------------');
+      });
+    } else {
+      console.log('No revisions found.');
+    }
+
+    // Respond with the spreadsheet info and revision history if it's a request
+    if (res) {
+      res.status(200).send({
+        spreadsheetId,
+        spreadsheetName,
+        revisions,
+      });
+    }
   } catch (error) {
-    console.error('Error sharing the Google Sheet:', error);
+    console.error('Error fetching spreadsheet information or revisions:', error.message);
+    if (res) {
+      res.status(500).send('Failed to fetch spreadsheet information.');
+    }
   }
 };
 
-exports.deployAppsScript = async (spreadsheetId) => {
+// Expose `printSpreadsheetInfoAndRevisions` via a GET route
+exports.getSpreadsheetInfoAndRevisions = printSpreadsheetInfoAndRevisions;
+
+exports.createOrUpdateGoogleSheet = async (req, res) => {
   try {
-    const scriptContent = `
-      function onEdit(e) {
-        const sheet = e.source.getActiveSheet();
-        const range = e.range;
-        const value = e.value;
+    const sheetsFilePath = path.join(__dirname, '../uploads/sheets.json');
 
-        const data = {
-          sheetName: sheet.getName(),
-          row: range.getRow(),
-          column: range.getColumn(),
-          newValue: value,
-          timestamp: new Date(),
-        };
+    if (!fs.existsSync(sheetsFilePath)) {
+      console.log('Error: sheets.json not found.');
+      return res.status(400).send('sheets.json not found.');
+    }
 
-        const options = {
-          method: 'POST',
-          contentType: 'application/json',
-          payload: JSON.stringify(data)
-        };
+    let processedSheetData;
+    try {
+      processedSheetData = JSON.parse(fs.readFileSync(sheetsFilePath, 'utf8'));
+      console.log('sheets.json file loaded successfully.');
+    } catch (error) {
+      console.log('Error parsing sheets.json:', error.message);
+      return res.status(400).send('Invalid JSON format in sheets.json.');
+    }
 
-        UrlFetchApp.fetch('https://your-node-server.com/sheet-updates', options);
-      }
-    `;
+    // Sheet creation or update logic here...
 
-    await script.projects.createContent({
-      scriptId: 'YOUR_SCRIPT_ID',
-      resource: {
-        files: [
-          {
-            name: 'Code.gs',
-            type: 'SERVER_JS',
-            source: scriptContent,
-          },
-        ],
-      },
-    });
-
-    console.log(`Apps Script deployed to track changes on spreadsheet: ${spreadsheetId}`);
+    res.status(200).send('Sheet created or updated.');
   } catch (error) {
-    console.error('Error deploying Apps Script:', error);
-  }
-};
-
-exports.receiveSheetUpdates = async (req, res) => {
-  try {
-    const changeLog = req.body;
-
-    await ChangeLog.create(changeLog);
-
-    res.status(200).send('Change log received and stored.');
-  } catch (error) {
-    console.error('Error receiving change log:', error);
-    res.status(500).send('Error processing change log.');
+    console.error('Error creating or updating the Google Sheet:', error);
+    return res.status(500).send('Failed to create or update the Google Spreadsheet.');
   }
 };
