@@ -8,7 +8,10 @@ const router = express.Router();
 router.post('/create', googleSheetsController.createOrUpdateGoogleSheet);
 
 // Route to receive Google Sheet change updates
-// router.post('/sheet-updates', googleSheetsController.receiveSheetUpdates);
+router.get('/sync-google-sheet', (req, res) => {
+  googleSheetsController.syncGoogleSheet();
+  res.send('Sync process started.');
+});
 
 // Route to manually process sheets.json and test formatting
 router.post('/process-sheets', (req, res) => {
