@@ -185,6 +185,53 @@ const getSpreadsheetInfoAndRevisions = async (req, res) => {
   }
 };
 
+const fetchSpreadsheetData = async () => {
+  try {
+    // Read sheetId.json to get the spreadsheetId
+    const sheetIdData = JSON.parse(fs.readFileSync(sheetIdFilePath, 'utf8'));
+    const { spreadsheetId } = sheetIdData;
+
+    if (!spreadsheetId) {
+      throw new Error('spreadsheetId not found in sheetId.json.');
+    }
+
+    console.log(`Fetching data for spreadsheet ID: ${spreadsheetId}`);
+
+    // Fetch the data from the Google Spreadsheet using the Sheets API
+    const response = await sheets.spreadsheets.get({
+      spreadsheetId,
+    });
+
+    // Extract the sheet name and data
+    const sheetTitle = response.data.sheets[0].properties.title;
+    console.log(`Fetched sheet: ${sheetTitle}`);
+
+    // Fetch the values from the spreadsheet
+    const sheetDataResponse = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `${sheetTitle}!A1:Z1000`, // Adjust the range as necessary
+    });
+
+    const sheetData = sheetDataResponse.data.values || [];
+
+    // Write the fetched data to sheets.json
+    const sheetsJsonData = {
+      sheet: {
+        title: sheetTitle,
+        data: sheetData,
+      },
+    };
+
+    fs.writeFileSync(sheetsFilePath, JSON.stringify(sheetsJsonData, null, 2));
+    console.log('Updated sheets.json with the latest Google Sheet data.');
+
+  } catch (error) {
+    console.error('Error fetching spreadsheet data:', error.message);
+  }
+};
+
+// fetchSpreadsheetData();
+
 updateLatestModifiedTimeIfMissing();
 
 // Export functions
