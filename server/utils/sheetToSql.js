@@ -16,8 +16,8 @@ const sheetToSql = () => {
     // Extract the headers from the first row
     const headers = data[0]; // First row is assumed to be headers ["Name", "Value"]
 
-    // Extract the actual data (rows start from index 2 in the provided example)
-    const rows = data.slice(2);
+    // Extract the actual data (rows start from index 1)
+    const rows = data.slice(1);
 
     // Define the structure of the SQL table
     const sqlTable = {
