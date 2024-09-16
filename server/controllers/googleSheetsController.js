@@ -107,6 +107,7 @@ const fetchSpreadsheetData = async () => {
 const createOrUpdateGoogleSheet = async (req, res) => {
   try {
     const sheetsFilePath = path.join(__dirname, '../uploads/sheets.json');
+    const sheetIdFilePath = path.join(__dirname, '../uploads/sheetId.json'); // Ensure this path is correct
 
     let processedSheetData;
     try {
@@ -115,11 +116,18 @@ const createOrUpdateGoogleSheet = async (req, res) => {
       return res.status(400).send('Invalid JSON format in sheets.json.');
     }
 
-    const { title, columns, data } = processedSheetData.sheet;
-    const rows = [columns, ...data];
+    const { title, columns } = processedSheetData.sheet;
+    const data = processedSheetData.data;
+    const rows = [columns, ...columns.map((col, index) => data[col])];
 
     let spreadsheetId;
-    const sheetIdData = JSON.parse(fs.readFileSync(sheetIdFilePath, 'utf8'));
+    let sheetIdData = {};
+    try {
+      sheetIdData = JSON.parse(fs.readFileSync(sheetIdFilePath, 'utf8'));
+    } catch (error) {
+      console.log('No existing sheet ID found, creating a new sheet.');
+    }
+
     if (sheetIdData && sheetIdData.spreadsheetId) {
       spreadsheetId = sheetIdData.spreadsheetId;
       console.log(`Updating Google Sheet with ID: ${spreadsheetId}`);
@@ -131,6 +139,8 @@ const createOrUpdateGoogleSheet = async (req, res) => {
         resource: { values: rows },
       });
       console.log(`Google Sheet updated: ${spreadsheetId}`);
+      sheetIdData.latestModifiedTime = new Date().toISOString();
+      fs.writeFileSync(sheetIdFilePath, JSON.stringify(sheetIdData, null, 2));
       res.status(200).send(`Sheet updated: ${spreadsheetId}`);
     } else {
       console.log('Creating new Google Sheet...');
@@ -142,12 +152,27 @@ const createOrUpdateGoogleSheet = async (req, res) => {
       });
       spreadsheetId = response.data.spreadsheetId;
       sheetIdData.spreadsheetId = spreadsheetId;
+      sheetIdData.latestModifiedTime = new Date().toISOString();
       fs.writeFileSync(sheetIdFilePath, JSON.stringify(sheetIdData, null, 2));
-      res.status(200).send(`Sheet created: ${spreadsheetId}`);
+
+      // Share the new Google Sheet with hollanishan@gmail.com
+      await drive.permissions.create({
+        fileId: spreadsheetId,
+        resource: {
+          role: 'writer',
+          type: 'user',
+          emailAddress: 'hollanishan@gmail.com',
+        },
+        sendNotificationEmail: true,
+      });
+
+      res.status(200).send(`Sheet created and shared: ${spreadsheetId}`);
     }
   } catch (error) {
     console.error('Error creating/updating Google Sheet:', error);
-    res.status(500).send('Error creating/updating Google Sheet.');
+    if (!res.headersSent) {
+      res.status(500).send('Error creating/updating Google Sheet.');
+    }
   }
 };
 

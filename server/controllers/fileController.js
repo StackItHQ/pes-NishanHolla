@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const sqlController = require('./mySqlController'); // Assuming you have this for MySQL
-const sheetController = require('./sheetsController'); // Assuming you have this for Google Sheets
+const sheetController = require('./googleSheetsController'); // Assuming you have this for Google Sheets
 
 // Controller to handle file upload, transformation, and sheet/table creation
 exports.uploadFile = async (req, res, uploadedFiles) => {
@@ -24,19 +24,20 @@ exports.uploadFile = async (req, res, uploadedFiles) => {
     fs.writeFileSync(path.join(__dirname, '../uploads', 'sheets.json'), JSON.stringify(sheetsFormat, null, 2), 'utf8');
     fs.writeFileSync(path.join(__dirname, '../uploads', 'sql.json'), JSON.stringify(sqlFormat, null, 2), 'utf8');
 
-    // After transforming the data, create Google Sheet and MySQL table
-
-    // 1. Create the Google Sheet
-    await sheetController.uploadSheetFromJSON(req, res);  // Assuming this function uploads a Google Sheet from 'sheets.json'
+    // 1. Create or update the Google Sheet
+    await sheetController.createOrUpdateGoogleSheet(req, res);  // Assuming this function uploads a Google Sheet from 'sheets.json'
 
     // 2. Create MySQL table and insert data
-    await sqlController.createTableFromFile();  // Assuming this creates the table based on 'sql.json'
-    await sqlController.insertDataFromFile();   // Assuming this inserts data from 'sql.json' into the newly created table
+    await sqlController.processSqlJsonFile();  // Assuming this creates the table based on 'sql.json'
 
     res.status(200).send('Files created, Google Sheet uploaded, and MySQL table created successfully.');
   } catch (error) {
     console.error('Error processing the file:', error);
-    res.status(500).send('Error processing the file.');
+
+    // Ensure that you only send one response
+    if (!res.headersSent) {
+      res.status(500).send('Error processing the file.');
+    }
   }
 };
 
@@ -59,13 +60,19 @@ function transformData(inputJson) {
     data.push(row); // Add the constructed row to the data array
   }
 
-  // Convert JSON data to Google Sheets format (assuming this part is still needed)
+  // Convert JSON data to Google Sheets format
+  const sheetsData = [];
+  for (let i = 0; i < dataLength; i++) {
+    const row = columns.map(column => jsonData[column][i]);
+    sheetsData.push(row);
+  }
+
   const sheetsFormat = {
     "sheet": {
       "title": "New Sheet",
       "columns": columns // Column names
     },
-    "data": jsonData // Directly include data in array format
+    "data": sheetsData // Array of arrays for Google Sheets
   };
 
   // Convert JSON data to SQL format
