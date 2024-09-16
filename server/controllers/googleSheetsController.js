@@ -4,6 +4,7 @@ const path = require('path');
 const cron = require('node-cron'); // Import node-cron for polling
 const serviceAccount = require('../superjoin-sheetsv.json');
 const sheetToSql = require('../utils/sheetToSql');
+const sqlController = require('./mySqlController'); // Assuming you have this for MySQL
 
 const auth = new google.auth.GoogleAuth({
   credentials: serviceAccount,
@@ -21,30 +22,35 @@ const detectAndUpdateSheet = async () => {
   try {
     const sheetIdData = JSON.parse(fs.readFileSync(sheetIdFilePath, 'utf8'));
     const { spreadsheetId, latestModifiedTime } = sheetIdData;
-
+    console.log(spreadsheetId+' '+latestModifiedTime);
     if (!spreadsheetId) {
       throw new Error('spreadsheetId not found in sheetId.json.');
     }
 
     console.log(`Current latestModifiedTime in sheetId.json: ${latestModifiedTime || 'No previous timestamp set.'}`);
 
+    // Fetch the revision log from Google Drive
     const revisionsResponse = await drive.revisions.list({ fileId: spreadsheetId });
     const revisions = revisionsResponse.data.revisions;
 
+    // Sort the revisions by modified time (descending) and get the latest one
     const latestRevision = revisions.sort((a, b) => new Date(b.modifiedTime) - new Date(a.modifiedTime))[0];
 
     console.log(`Latest revision timestamp from Google Drive: ${latestRevision.modifiedTime}`);
 
-    if (!latestModifiedTime || new Date(latestRevision.modifiedTime) > new Date(latestModifiedTime)) {
+    // Compare the latest revision time with the one stored in sheetId.json
+    if (new Date(latestRevision.modifiedTime) > new Date(latestModifiedTime)) {
       console.log('New update detected. Updating sheetId.json and fetching the updated Google Sheet data...');
 
+      // Update the latestModifiedTime in sheetId.json
       sheetIdData.latestModifiedTime = latestRevision.modifiedTime;
       fs.writeFileSync(sheetIdFilePath, JSON.stringify(sheetIdData, null, 2));
       console.log(`Updated sheetId.json with the latest timestamp: ${latestRevision.modifiedTime}`);
 
+      // Fetch the updated Google Sheet data since an update is detected
       await fetchSpreadsheetData();
     } else {
-      console.log('No new updates detected.');
+      console.log('No new updates detected. Skipping fetching the sheet.');
     }
   } catch (error) {
     console.error('Error detecting update or fetching data:', error.message);
@@ -88,15 +94,8 @@ const fetchSpreadsheetData = async () => {
     sheetToSql(); // Convert sheets.json to sql.json
     console.log('sheetToSql function executed, transformed sheets.json to sql.json.');
 
-    const sqlData = JSON.parse(fs.readFileSync(sqlFilePath, 'utf8'));
-
-    // First, create or overwrite the table using sql.json structure
-    await createOrOverwriteTable(sqlData.table);
-    console.log(`Table ${sqlData.table.name} has been updated.`);
-
-    // Then, insert the new data into the table
-    await insertData(sqlData.table.name, sqlData.data);
-    console.log(`Data has been updated into the table ${sqlData.table.name}.`);
+    await sqlController.processSqlJsonFile();  // Assuming this creates the table based on 'sql.json'
+    console.log(`Data has been updated into the table.`);
 
   } catch (error) {
     console.error('Error fetching spreadsheet data:', error.message);
@@ -206,13 +205,16 @@ const getSpreadsheetInfoAndRevisions = async (req, res) => {
 // Function to start polling
 const startPolling = () => {
   console.log('Starting polling for Google Sheets updates...');
-  
-  // Poll every 10 seconds
-  cron.schedule('*/10 * * * * *', async () => {
-    console.log('Polling Google Sheets for updates...');
-    await detectAndUpdateSheet();
+
+  // Poll every minute to reduce server load
+  cron.schedule('* * * * *', async () => {
+    try {
+      console.log('Polling Google Sheets for updates...');
+      await detectAndUpdateSheet();
+    } catch (error) {
+      console.error('Error during polling:', error.message);
+    }
   });
-  
 };
 
 const deleteGoogleSheet = async () => {
@@ -246,9 +248,10 @@ const deleteGoogleSheet = async () => {
   }
 };
 
-updateLatestModifiedTimeIfMissing();
+// updateLatestModifiedTimeIfMissing();
 // Start polling when the module is loaded
 startPolling();
+// detectAndUpdateSheet();
 
 // Exporting all functions
 module.exports = {

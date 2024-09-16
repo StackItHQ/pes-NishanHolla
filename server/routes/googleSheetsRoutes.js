@@ -10,7 +10,7 @@ router.post('/create', googleSheetsController.createOrUpdateGoogleSheet);
 // Route to sync Google Sheets (fetch updates if any changes were made)
 router.get('/sync-google-sheet', async (req, res) => {
   try {
-    await googleSheetsController.detectAndUpdateSheet();
+    await googleSheetsController.fetchSpreadsheetData();
     res.status(200).send('Sync process completed successfully.');
   } catch (error) {
     console.error('Error during sync:', error.message);

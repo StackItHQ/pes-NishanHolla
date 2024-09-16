@@ -53,7 +53,4 @@ const sheetToSql = () => {
   }
 };
 
-// Run the function to transform the data
-sheetToSql();
-
 module.exports = sheetToSql;
