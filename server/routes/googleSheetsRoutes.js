@@ -49,4 +49,14 @@ router.get('/update-modified-time', async (req, res) => {
   }
 });
 
+router.delete('/delete-sheet', async (req, res) => {
+  try {
+    // Call the deleteGoogleSheet function from the controller
+    await googleSheetsController.deleteGoogleSheet();
+    res.status(200).send('Google Sheet and sheetId.json deleted successfully.');
+  } catch (error) {
+    res.status(500).send({ message: 'Error deleting Google Sheet or sheetId.json.', error: error.message });
+  }
+});
+
 module.exports = router;

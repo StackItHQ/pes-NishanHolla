@@ -113,5 +113,22 @@ async function processSqlJsonFile() {
   });
 }
 
-module.exports = { checkMySqlConnc, createOrOverwriteTable, insertData, getAllDataFromTable, processSqlJsonFile };
+// Function to delete a table
+async function deleteTable(tableName) {
+  return new Promise((resolve, reject) => {
+    const connection = mysqlSingleton.createMySQLConnection();
+    const dropTableQuery = `DROP TABLE IF EXISTS ${tableName}`;
+
+    connection.query(dropTableQuery, (err, results) => {
+      if (err) {
+        console.error(`Error deleting table ${tableName}:`, err);
+        return reject(err);
+      }
+      console.log(`Table ${tableName} deleted successfully.`);
+      resolve(results);
+    });
+  });
+}
+
+module.exports = { checkMySqlConnc, createOrOverwriteTable, insertData, getAllDataFromTable, processSqlJsonFile, deleteTable };
 

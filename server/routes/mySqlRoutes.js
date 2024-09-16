@@ -48,4 +48,20 @@ router.get('/get-data/:tableName', logMiddleware, checkMySqlConncMiddleware, asy
   }
 });
 
+router.delete('/delete-table/:tableName', async (req, res) => {
+  const { tableName } = req.params;
+
+  try {
+    if (!tableName) {
+      return res.status(400).send('Table name is required');
+    }
+
+    // Call the deleteTable function
+    await mySqlController.deleteTable(tableName);
+    res.status(200).send(`Table ${tableName} deleted successfully.`);
+  } catch (error) {
+    res.status(500).send({ message: `Error deleting table ${tableName}.`, error: error.message });
+  }
+});
+
 module.exports = router;

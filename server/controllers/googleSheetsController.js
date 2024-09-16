@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const cron = require('node-cron'); // Import node-cron for polling
 const serviceAccount = require('../superjoin-sheetsv.json');
+const sheetToSql = require('../utils/sheetToSql');
 
 const auth = new google.auth.GoogleAuth({
   credentials: serviceAccount,
@@ -83,6 +84,20 @@ const fetchSpreadsheetData = async () => {
 
     fs.writeFileSync(sheetsFilePath, JSON.stringify(sheetsJsonData, null, 2));
     console.log('Updated sheets.json with the latest Google Sheet data.');
+
+    sheetToSql(); // Convert sheets.json to sql.json
+    console.log('sheetToSql function executed, transformed sheets.json to sql.json.');
+
+    const sqlData = JSON.parse(fs.readFileSync(sqlFilePath, 'utf8'));
+
+    // First, create or overwrite the table using sql.json structure
+    await createOrOverwriteTable(sqlData.table);
+    console.log(`Table ${sqlData.table.name} has been updated.`);
+
+    // Then, insert the new data into the table
+    await insertData(sqlData.table.name, sqlData.data);
+    console.log(`Data has been updated into the table ${sqlData.table.name}.`);
+
   } catch (error) {
     console.error('Error fetching spreadsheet data:', error.message);
   }
@@ -200,6 +215,38 @@ const startPolling = () => {
   
 };
 
+const deleteGoogleSheet = async () => {
+  try {
+    // Read sheetId.json to get the spreadsheetId (fileId in Drive)
+    const sheetIdData = JSON.parse(fs.readFileSync(sheetIdFilePath, 'utf8'));
+    const { spreadsheetId } = sheetIdData;
+
+    if (!spreadsheetId) {
+      throw new Error('spreadsheetId not found in sheetId.json.');
+    }
+
+    console.log(`Deleting Google Sheet with ID: ${spreadsheetId}`);
+
+    // Call the Drive API to delete the Google Sheet
+    await drive.files.delete({
+      fileId: spreadsheetId,
+    });
+
+    console.log(`Google Sheet with ID ${spreadsheetId} deleted successfully.`);
+
+    // Check if sheetId.json exists, then delete it
+    if (fs.existsSync(sheetIdFilePath)) {
+      fs.unlinkSync(sheetIdFilePath); // Remove the sheetId.json file
+      console.log('sheetId.json removed successfully.');
+    } else {
+      console.log('sheetId.json file not found.');
+    }
+  } catch (error) {
+    console.error('Error deleting Google Sheet or sheetId.json:', error.message);
+  }
+};
+
+updateLatestModifiedTimeIfMissing();
 // Start polling when the module is loaded
 startPolling();
 
@@ -210,4 +257,5 @@ module.exports = {
   createOrUpdateGoogleSheet,
   updateLatestModifiedTimeIfMissing,
   getSpreadsheetInfoAndRevisions,
+  deleteGoogleSheet,
 };
