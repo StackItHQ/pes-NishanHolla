@@ -49,6 +49,10 @@ const detectAndUpdateSheet = async () => {
 
       // Fetch the updated Google Sheet data since an update is detected
       await fetchSpreadsheetData();
+      
+      await sqlController.processSqlJsonFile();  // Assuming this creates the table based on 'sql.json'
+      console.log(`Data has been updated into the table.`);
+
     } else {
       console.log('No new updates detected. Skipping fetching the sheet.');
     }
@@ -93,9 +97,6 @@ const fetchSpreadsheetData = async () => {
 
     sheetToSql(); // Convert sheets.json to sql.json
     console.log('sheetToSql function executed, transformed sheets.json to sql.json.');
-
-    await sqlController.processSqlJsonFile();  // Assuming this creates the table based on 'sql.json'
-    console.log(`Data has been updated into the table.`);
 
   } catch (error) {
     console.error('Error fetching spreadsheet data:', error.message);
@@ -206,8 +207,8 @@ const getSpreadsheetInfoAndRevisions = async (req, res) => {
 const startPolling = () => {
   console.log('Starting polling for Google Sheets updates...');
 
-  // Poll every minute to reduce server load
-  cron.schedule('* * * * *', async () => {
+  // Poll every 10 seconds
+  cron.schedule('*/10 * * * * *', async () => {
     try {
       console.log('Polling Google Sheets for updates...');
       await detectAndUpdateSheet();

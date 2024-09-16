@@ -1,6 +1,7 @@
 const express = require('express');
 const googleSheetsController = require('../controllers/googleSheetsController');
 const processData = require('../utils/sheetProcessor');
+const sqlController = require('../controllers/mySqlController'); // Assuming you have this for MySQL
 
 const router = express.Router();
 
@@ -11,6 +12,10 @@ router.post('/create', googleSheetsController.createOrUpdateGoogleSheet);
 router.get('/sync-google-sheet', async (req, res) => {
   try {
     await googleSheetsController.fetchSpreadsheetData();
+    
+    await sqlController.processSqlJsonFile();  // Assuming this creates the table based on 'sql.json'
+    console.log(`Data has been updated into the table.`);
+
     res.status(200).send('Sync process completed successfully.');
   } catch (error) {
     console.error('Error during sync:', error.message);
