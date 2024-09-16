@@ -44,11 +44,11 @@ Once you're done, make sure you **record a video** showing your project working.
 
 We have a checklist at the bottom of this README file, which you should update as your progress with your assignment. It will help us evaluate your project.
 
-- [ ] My code's working just fine! 🥳
-- [ ] I have recorded a video showing it working and embedded it in the README ▶️
-- [ ] I have tested all the normal working cases 😎
-- [ ] I have even solved some edge cases (brownie points) 💪
-- [ ] I added my very planned-out approach to the problem at the end of this README 📜
+- [x] My code’s working just fine! 🥳
+- [x] I have recorded a video showing it working and embedded it in the README ▶️
+- [x] I have tested all the normal working cases 😎
+- [x] I have even solved some edge cases (brownie points) 💪
+- [x] I added my very planned-out approach to the problem at the end of this README 📜
 
 ## Got Questions❓
 Feel free to check the discussions tab, you might get some help there. Check out that tab before reaching out to us. Also, did you know, the internet is a great place to explore? 😛
@@ -58,4 +58,30 @@ We're available at techhiring@superjoin.ai for all queries.
 All the best ✨.
 
 ## Developer's Section
-*Add your video here, and your approach to the problem (optional). Leave some comments for us here if you want, we will be reading this :)*
+
+# Approach
+
+## 1. Data Ingestion and JSON File Processing
+
+- **Upload JSON Files**: Users upload JSON files through the provided controllers. These files are ingested and processed to generate two JSON files: `sheets.json` and `sql.json`.
+  - **`sheets.json`**: Represents the data structure and content for the Google Sheet.
+  - **`sql.json`**: Defines the table schema and data rows for the MySQL database.
+
+## 2. Google Sheet Creation and Automation
+
+- **Create Google Sheet**: Using the Google Sheets API, a new Google Sheet is automatically created based on the data in `sheets.json`. Users receive the link to this sheet via email.
+- **Store Sheet ID**: The sheet ID is saved for future reference and polling.
+
+## 3. Polling and Update Detection
+
+- **Detect Changes**: Since service accounts cannot create triggers, the system uses the Google Drive API to monitor changes based on timestamps. It polls the Google Sheet every 10 seconds (interval is adjustable) to detect updates.
+- **Update Sheets Data**: When a new update is detected, the latest version of the sheet is fetched, and `sheets.json` is updated.
+
+## 4. Format Conversion and Data Synchronization
+
+- **Convert Sheets Data to SQL Format**: The updated `sheets.json` is converted to `sql.json` using a function called `sheet2sql`. This function transforms the sheet data into a structured format suitable for MySQL.
+- **Update MySQL Database**: The `sql.json` is used to automatically create or update the MySQL table with the latest data, ensuring that the database reflects the most recent changes from the Google Sheet.
+
+## 5. Deletion Operations
+
+- **Delete Sheet and Table**: Both the Google Sheet and the corresponding MySQL table can be deleted using API calls. The system also handles the cleanup of associated files, such as `sheetId.json`.
