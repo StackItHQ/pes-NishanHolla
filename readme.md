@@ -59,6 +59,12 @@ All the best ✨.
 
 ## Developer's Section
 
+## Video
+<video width="600" controls>
+  <source src="[path/to/your/video.mp4](https://drive.google.com/file/d/1rLHAs-GkYMHJuVdpIJZp568cRdfu4jMq/view?usp=sharing)" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
+
 # Approach
 
 ## 1. Data Ingestion and JSON File Processing
