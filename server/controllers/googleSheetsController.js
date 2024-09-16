@@ -118,7 +118,18 @@ const createOrUpdateGoogleSheet = async (req, res) => {
 
     const { title, columns } = processedSheetData.sheet;
     const data = processedSheetData.data;
-    const rows = [columns, ...columns.map((col, index) => data[col])];
+
+    // Ensure data is correctly structured
+    if (!columns || !Array.isArray(columns) || columns.length === 0) {
+      return res.status(400).send('Invalid columns format in sheets.json.');
+    }
+
+    if (!data || !Array.isArray(data) || data.length === 0) {
+      return res.status(400).send('Invalid data format in sheets.json.');
+    }
+
+    // Prepare rows for Google Sheets
+    const rows = [columns, ...data];
 
     let spreadsheetId;
     let sheetIdData = {};
@@ -175,6 +186,7 @@ const createOrUpdateGoogleSheet = async (req, res) => {
     }
   }
 };
+
 
 // Function to check if latestModifiedTime is missing and update it
 const updateLatestModifiedTimeIfMissing = async () => {

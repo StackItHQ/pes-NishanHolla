@@ -12,7 +12,6 @@ router.post('/create', googleSheetsController.createOrUpdateGoogleSheet);
 router.get('/sync-google-sheet', async (req, res) => {
   try {
     await googleSheetsController.fetchSpreadsheetData();
-    
     await sqlController.processSqlJsonFile();  // Assuming this creates the table based on 'sql.json'
     console.log(`Data has been updated into the table.`);
 

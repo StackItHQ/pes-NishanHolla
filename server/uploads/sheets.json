@@ -1,51 +1,51 @@
 {
   "sheet": {
     "title": "New Sheet",
-    "columns": [
-      "Name",
-      "Value"
+    "data": [
+      [
+        "Name",
+        "Value"
+      ],
+      [
+        "Seth Anderson",
+        "3200"
+      ],
+      [
+        "Henry Gonzalez",
+        "$49,503.84"
+      ],
+      [
+        "Kimberly Howard",
+        "$340.34"
+      ],
+      [
+        "Charles Wilson",
+        "$85,046.22"
+      ],
+      [
+        "Devin Stewart",
+        "$9.59"
+      ],
+      [
+        "Joseph Smith",
+        "$561.26"
+      ],
+      [
+        "Julian Diaz",
+        "$101.72"
+      ],
+      [
+        "Tara Wiggins",
+        "$218.79"
+      ],
+      [
+        "Cassidy Bell",
+        "$534.79"
+      ],
+      [
+        "Nathaniel Price",
+        "$701.49"
+      ]
     ]
-  },
-  "data": [
-    [
-      "Seth Anderson",
-      "$241.66"
-    ],
-    [
-      "Henry Gonzalez",
-      "$49,503.84"
-    ],
-    [
-      "Kimberly Howard",
-      "$340.34"
-    ],
-    [
-      "Charles Wilson",
-      "$85,046.22"
-    ],
-    [
-      "Devin Stewart",
-      "$9.59"
-    ],
-    [
-      "Joseph Smith",
-      "$561.26"
-    ],
-    [
-      "Julian Diaz",
-      "$101.72"
-    ],
-    [
-      "Tara Wiggins",
-      "$218.79"
-    ],
-    [
-      "Cassidy Bell",
-      "$534.79"
-    ],
-    [
-      "Nathaniel Price",
-      "$701.49"
-    ]
-  ]
+  }
 }
